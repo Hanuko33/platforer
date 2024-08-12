@@ -12,8 +12,6 @@
 #include "text.h"
 #include "list/list.h"
 
-int debug = 0;
-
 SDL_Window *window;
 SDL_Renderer *renderer;
 struct Player
@@ -30,10 +28,19 @@ struct Player player;
 SDL_Texture* playerr_texture;
 SDL_Texture* playerl_texture;
 
+void player_reset()
+{
+    player.on_ground=1;
+    player.x=0;
+    player.y=0;
+    player.y_velocity=0;
+}
+
 enum tiles
 {
     TILE_wall,
     TILE_collectible,
+    TILE_death,
     TILE_max
 };
 
@@ -179,56 +186,13 @@ void draw()
     else
         SDL_RenderCopy(renderer, playerl_texture, NULL, &player_rect);
 
-    if (debug)
-    {
-        SDL_Rect collision_rect = player_rect;
-        collision_rect.x += 28;
-        collision_rect.w = 4;
-        collision_rect.y += 60;
-        collision_rect.h = 4;
-        SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
-        SDL_RenderDrawRect(renderer, &collision_rect);
-
-        collision_rect = player_rect;
-        collision_rect.x +=28;
-        collision_rect.w = 4;
-        collision_rect.y -= 5;
-        collision_rect.h = 4;
-        SDL_RenderDrawRect(renderer, &collision_rect);
-
-        collision_rect = player_rect;
-        collision_rect.y += 3;
-        collision_rect.h = 29;
-        collision_rect.x +=30;
-        collision_rect.w = 2;
-        SDL_RenderDrawRect(renderer, &collision_rect);
-
-        collision_rect = player_rect;
-        collision_rect.y += 3;
-        collision_rect.h = 29;
-        collision_rect.x +=28;
-        collision_rect.w = 2;
-        SDL_RenderDrawRect(renderer, &collision_rect);
-    }
-
     // Text draw
     char text[256];
     int text_y=16;
     
-    sprintf(text, "X: %d (%d)", player.x, player.x/64);
-    write_text(10, text_y, text, (SDL_Color){255,255,255,255}, 20, window, renderer);
-    text_y+=16;
-
-    sprintf(text, "Y: %d (%d)", player.y, player.y/64);
-    write_text(10, text_y, text, (SDL_Color){255,255,255,255}, 20, window, renderer);
-    text_y+=16;
-
     sprintf(text, "coins: %d", player.coins);
     write_text(10, text_y, text, (SDL_Color){255,255,255,255}, 20, window, renderer);
     text_y+=16;
-    
-    sprintf(text, "On ground: %d", player.on_ground);
-    write_text(10, text_y, text, (SDL_Color){255,255,255,255}, 20, window, renderer);
 
     // Tile draw
     if (world->var)
@@ -367,6 +331,12 @@ void update(const Uint8 * keys)
         List_delete(player_tile_collision(COLL_no, TILE_collectible));
         player.coins++;
     }
+
+    if (player_tile_collision(COLL_no, TILE_death))
+    {
+        player_reset();
+    }
+
     player.on_ground = player_check_tile_collision(COLL_down);
 
     if (player_check_tile_collision(COLL_down))
@@ -417,14 +387,11 @@ void update(const Uint8 * keys)
     player.y+=(int)(player.y_velocity);
 }
 
+
 int main()
 {
     load();
-
-    player.on_ground=1;
-    player.x=0;
-    player.y=0;
-    player.y_velocity=0;
+    player_reset();
 
     if (init_sdl2() != 0)
     {
@@ -436,6 +403,7 @@ int main()
     playerl_texture = load_texture("textures/playerl.png");
     tile_textures[TILE_wall] = load_texture("textures/wall.png");
     tile_textures[TILE_collectible] = load_texture("textures/coin.png");
+    tile_textures[TILE_death] = load_texture("textures/death.png");
 
     for (;;)
     {
@@ -455,70 +423,6 @@ int main()
                     case SDLK_ESCAPE:
                         SDL_Quit();
                         return 0;
-                    case SDLK_F1:
-                        debug ^= 1;
-                        break;
-                    case SDLK_F2:
-                        save();
-                        break;
-                    case SDLK_F3:
-                        load();
-                        break;
-                }
-            }
-            if (event.type == SDL_MOUSEBUTTONDOWN)
-            {
-                int x, y;
-                SDL_GetMouseState(&x, &y);
-                if (event.button.button == 1)
-                {
-                    List_append(world,
-                                Tile_create(
-                                        (x+player.x-480)/64,
-                                        (y+player.y-480)/64,
-                                    TILE_wall));
-                }
-                if (event.button.button == 2)
-                {
-                    List_append(world,
-                                Tile_create(
-                                        (x+player.x-480)/64,
-                                        (y+player.y-480)/64,
-                                    TILE_collectible));
-                }
-                if (event.button.button == 3)
-                {
-                    struct List * current = world;
-                    struct Tile * current_tile;
-                    for (;;) 
-                    {
-                        current_tile = ((struct Tile *)(current->var));
-
-                        if ((current_tile->x == (x+player.x-480)/64) && (current_tile->y == (y+player.y-480)/64))
-                        {
-                            if (current == world)
-                            {
-                                world = current->next;
-                                current = current->next;
-                                List_delete(current->previous);
-                            }
-                            else if (current->next)
-                            {
-                                current = current->next;
-                                List_delete(current->previous);
-                            }
-                            else if (current->previous)
-                            {
-                                current = current->previous;
-                                List_delete(current->next);
-                            }
-                        }
-
-                        if (current->next)
-                            current=current->next;
-                        else
-                            break;
-                    }
                 }
             }
         }
